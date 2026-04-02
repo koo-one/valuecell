@@ -13,12 +13,6 @@ import os
 from typing import Optional
 
 from agno.models.base import Model as AgnoModel
-from agno.models.dashscope import DashScope as AgnoDashScopeModel
-from agno.models.google import Gemini as AgnoGeminiModel
-from agno.models.openai import OpenAIChat as AgnoOpenAIChatModel
-from agno.models.openai import OpenAILike as AgnoOpenAILikeModel
-from agno.models.openrouter import OpenRouter as AgnoOpenRouterModel
-from agno.models.siliconflow import Siliconflow as AgnoSiliconflowModel
 from loguru import logger
 
 from valuecell.adapters.models.factory import (
@@ -27,6 +21,33 @@ from valuecell.adapters.models.factory import (
     create_model,
     create_model_for_agent,
 )
+
+try:
+    from agno.models.dashscope import DashScope as AgnoDashScopeModel
+except Exception:  # pragma: no cover
+    AgnoDashScopeModel = None
+
+try:
+    from agno.models.google import Gemini as AgnoGeminiModel
+except Exception:  # pragma: no cover
+    AgnoGeminiModel = None
+
+try:
+    from agno.models.openai import OpenAIChat as AgnoOpenAIChatModel
+    from agno.models.openai import OpenAILike as AgnoOpenAILikeModel
+except Exception:  # pragma: no cover
+    AgnoOpenAIChatModel = None
+    AgnoOpenAILikeModel = None
+
+try:
+    from agno.models.openrouter import OpenRouter as AgnoOpenRouterModel
+except Exception:  # pragma: no cover
+    AgnoOpenRouterModel = None
+
+try:
+    from agno.models.siliconflow import Siliconflow as AgnoSiliconflowModel
+except Exception:  # pragma: no cover
+    AgnoSiliconflowModel = None
 
 
 def describe_model(model: AgnoModel) -> str:
@@ -60,13 +81,23 @@ def model_should_use_json_mode(model: AgnoModel) -> bool:
         name = getattr(model, "name", None)
 
         # Google Gemini requires JSON mode
-        if provider == AgnoGeminiModel.provider and name == AgnoGeminiModel.name:
+        if (
+            AgnoGeminiModel
+            and provider == AgnoGeminiModel.provider
+            and name == AgnoGeminiModel.name
+        ):
             logger.debug("Detected Gemini model - using JSON mode")
+            return True
+
+        # Local ChatGPT OAuth provider should always use JSON mode for structured parsing.
+        if provider == "OpenAI" and "OAuth" in str(name):
+            logger.debug("Detected OpenAI OAuth model - using JSON mode")
             return True
 
         # Official OpenAI models support both, but JSON mode is more reliable
         if (
-            provider == AgnoOpenAIChatModel.provider
+            AgnoOpenAIChatModel
+            and provider == AgnoOpenAIChatModel.provider
             and name == AgnoOpenAIChatModel.name
         ):
             logger.debug("Detected OpenAI model - using JSON mode")
@@ -271,6 +302,14 @@ def create_model_with_provider(
     Raises:
         ValueError: If provider not found or not configured
     """
+    if provider != "openai":
+        logger.warning(
+            "Provider '{}' is disabled in this build. Falling back to OpenAI OAuth.",
+            provider,
+        )
+        provider = "openai"
+        if not model_id or "gpt" not in model_id.lower():
+            model_id = None
 
     # If no api_key override is supplied, use the standard factory path.
     if not api_key:

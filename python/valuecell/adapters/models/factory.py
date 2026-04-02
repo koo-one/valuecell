@@ -14,6 +14,8 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from valuecell.config.manager import ConfigManager, ProviderConfig, get_config_manager
+from valuecell.openai_oauth import CODEX_BASE_URL, OpenAIOAuthChat
+from valuecell.openai_oauth.auth import has_stored_credentials
 
 
 class ModelProvider(ABC):
@@ -343,62 +345,37 @@ class SiliconFlowProvider(ModelProvider):
 
 
 class OpenAIProvider(ModelProvider):
-    """OpenAI model provider"""
+    """OpenAI provider backed by local ChatGPT OAuth."""
 
     def create_model(self, model_id: Optional[str] = None, **kwargs):
-        """Create OpenAI model via agno"""
-        try:
-            from agno.models.openai import OpenAIChat
-        except ImportError:
-            raise ImportError(
-                "agno package not installed. Install with: pip install agno"
-            )
-
+        """Create OpenAI OAuth model."""
         model_id = model_id or self.config.default_model
         params = {**self.config.parameters, **kwargs}
 
-        logger.info(f"Creating OpenAI model: {model_id}")
+        logger.info(f"Creating OpenAI OAuth model: {model_id}")
 
-        return OpenAIChat(
+        max_output_tokens = params.get("max_output_tokens")
+        if max_output_tokens is None:
+            max_output_tokens = params.get("max_tokens")
+
+        return OpenAIOAuthChat(
             id=model_id,
-            api_key=self.config.api_key,
-            base_url=self.config.base_url,
+            base_url=self.config.base_url or CODEX_BASE_URL,
+            reasoning_effort=params.get("reasoning_effort", "medium"),
+            verbosity=params.get("verbosity", "medium"),
             temperature=params.get("temperature"),
-            max_tokens=params.get("max_tokens"),
-            top_p=params.get("top_p"),
-            frequency_penalty=params.get("frequency_penalty"),
-            presence_penalty=params.get("presence_penalty"),
+            max_output_tokens=max_output_tokens,
+            timeout=params.get("timeout"),
         )
 
     def create_embedder(self, model_id: Optional[str] = None, **kwargs):
-        """Create embedder via OpenAI"""
-        try:
-            from agno.knowledge.embedder.openai import OpenAIEmbedder
-        except ImportError:
-            raise ImportError("agno package not installed")
-
-        # Use provided model_id or default embedding model
-        model_id = model_id or self.config.default_embedding_model
-
-        if not model_id:
-            raise ValueError(
-                f"No embedding model specified for provider '{self.config.name}'"
-            )
-
-        # Merge parameters: provider embedding defaults < kwargs
-        params = {**self.config.embedding_parameters, **kwargs}
-
-        logger.info(f"Creating OpenAI embedder: {model_id}")
-
-        return OpenAIEmbedder(
-            id=model_id,
-            api_key=self.config.api_key,
-            base_url=self.config.base_url,
-            dimensions=int(params.get("dimensions", 1536))
-            if params.get("dimensions")
-            else None,
-            encoding_format=params.get("encoding_format", "float"),
+        """Embeddings are not available via ChatGPT OAuth."""
+        raise NotImplementedError(
+            "OpenAI OAuth provider does not expose embedding models."
         )
+
+    def is_available(self) -> bool:
+        return has_stored_credentials()
 
 
 class OpenAICompatibleProvider(ModelProvider):

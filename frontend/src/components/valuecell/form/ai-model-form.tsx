@@ -3,8 +3,11 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetModelProviderDetail,
+  useLoginModelProviderOAuth,
+  useLogoutModelProviderOAuth,
   useGetSortedModelProviders,
 } from "@/api/setting";
+import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { SelectItem } from "@/components/ui/select";
 import PngIcon from "@/components/valuecell/icon/png-icon";
@@ -32,6 +35,10 @@ export const AIModelForm = withForm({
       data: modelProviderDetail,
       refetch: fetchModelProviderDetail,
     } = useGetModelProviderDetail(provider);
+    const { mutateAsync: loginOAuth, isPending: loggingIn } =
+      useLoginModelProviderOAuth();
+    const { mutateAsync: logoutOAuth, isPending: loggingOut } =
+      useLogoutModelProviderOAuth();
 
     // Set the default provider once loaded and provider is not yet selected
     useEffect(() => {
@@ -100,14 +107,45 @@ export const AIModelForm = withForm({
           }}
         </form.AppField>
 
-        <form.AppField name="api_key">
-          {(field) => (
-            <field.PasswordField
-              label={t("strategy.form.aiModels.apiKey.label")}
-              placeholder={t("strategy.form.aiModels.apiKey.placeholder")}
-            />
-          )}
-        </form.AppField>
+        {provider === "openai" && modelProviderDetail && (
+          <div className="rounded-lg border border-border bg-card px-4 py-3">
+            <div className="font-medium text-sm">ChatGPT OAuth</div>
+            <div className="mt-1 text-muted-foreground text-xs">
+              {modelProviderDetail.oauth_authenticated
+                ? `Connected${modelProviderDetail.oauth_expires_at ? `, expires ${new Date(modelProviderDetail.oauth_expires_at).toLocaleString()}` : ""}`
+                : "Not connected"}
+            </div>
+            <div className="mt-3 flex gap-2">
+              {!modelProviderDetail.oauth_authenticated ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={loggingIn}
+                  onClick={async () => {
+                    await loginOAuth({ provider });
+                    await fetchModelProviderDetail();
+                  }}
+                >
+                  {loggingIn ? "Connecting..." : "Connect ChatGPT"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={loggingOut}
+                  onClick={async () => {
+                    await logoutOAuth({ provider });
+                    form.setFieldValue("api_key", "");
+                    await fetchModelProviderDetail();
+                  }}
+                >
+                  {loggingOut ? "Disconnecting..." : "Disconnect"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </FieldGroup>
     );
   },

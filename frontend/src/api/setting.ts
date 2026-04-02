@@ -88,6 +88,42 @@ export const useUpdateProviderConfig = () => {
   });
 };
 
+export const useLoginModelProviderOAuth = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: { provider: string; manual?: boolean }) =>
+      apiClient.post<ApiResponse<ProviderDetail>>(
+        `/models/providers/${params.provider}/oauth/login?manual=${params.manual ? "true" : "false"}`,
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: API_QUERY_KEYS.SETTING.modelProviderDetail([
+          variables.provider,
+        ]),
+      });
+    },
+  });
+};
+
+export const useLogoutModelProviderOAuth = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: { provider: string }) =>
+      apiClient.post<ApiResponse<ProviderDetail>>(
+        `/models/providers/${params.provider}/oauth/logout`,
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: API_QUERY_KEYS.SETTING.modelProviderDetail([
+          variables.provider,
+        ]),
+      });
+    },
+  });
+};
+
 export const useAddProviderModel = () => {
   const queryClient = useQueryClient();
 
@@ -201,7 +237,7 @@ export const useGetSortedModelProviders = () => {
         ),
       select: (data: ApiResponse<ProviderDetail>) => ({
         provider: p.provider,
-        hasApiKey: !!data.data?.api_key,
+        isConfigured: !!data.data?.oauth_authenticated || !!data.data?.api_key,
       }),
       staleTime: 5 * 60 * 1000,
     })),
@@ -219,7 +255,7 @@ export const useGetSortedModelProviders = () => {
     const apiKeyMap = new Map<string, boolean>();
     for (const query of providerDetailsQueries) {
       if (query.data) {
-        apiKeyMap.set(query.data.provider, query.data.hasApiKey);
+        apiKeyMap.set(query.data.provider, query.data.isConfigured);
       }
     }
 

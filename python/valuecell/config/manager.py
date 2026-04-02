@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from valuecell.config.loader import ConfigLoader, get_config_loader
+from valuecell.openai_oauth.auth import has_stored_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -103,91 +104,28 @@ class ConfigManager:
     @property
     def primary_provider(self) -> str:
         """
-        Get primary model provider with auto-detection
+        Get primary model provider.
 
-        Priority:
-        1. PRIMARY_PROVIDER env var (explicit override)
-        2. Auto-detect based on available API keys
-        3. Config file default
+        ValueCell is intentionally pinned to the local OpenAI OAuth path.
         """
-        # 1. Explicit environment variable (highest priority)
         env_provider = os.getenv("PRIMARY_PROVIDER")
         if env_provider:
-            logger.debug(f"Using provider from PRIMARY_PROVIDER: {env_provider}")
-            return env_provider
-
-        # 2. Auto-detect based on available API keys
-        # Check if auto-detection is enabled (default: true)
-        auto_detect = os.getenv("AUTO_DETECT_PROVIDER", "true").lower() in (
-            "true",
-            "yes",
-            "1",
-        )
-
-        if auto_detect:
-            enabled_providers = self.get_enabled_providers()
-            if enabled_providers:
-                # Priority order for auto-selection
-                preferred_order = [
-                    "openrouter",
-                    "siliconflow",
-                    "google",
-                    "openai",
-                    "openai-compatible",
-                    "azure",
-                    "ollama",
-                ]
-
-                for preferred in preferred_order:
-                    if preferred in enabled_providers:
-                        logger.info(
-                            f"Auto-selected provider: {preferred} "
-                            f"(API key detected, available providers: {enabled_providers})"
-                        )
-                        return preferred
-
-                # Fallback to first enabled provider if none in preferred list
-                selected = enabled_providers[0]
-                logger.info(
-                    f"Auto-selected provider: {selected} "
-                    f"(first available, all providers: {enabled_providers})"
+            if env_provider != "openai":
+                logger.warning(
+                    "Ignoring PRIMARY_PROVIDER=%s because ValueCell is configured for OpenAI OAuth only.",
+                    env_provider,
                 )
-                return selected
-
-        # 3. Config file default
-        default = self._config.get("models", {}).get("primary_provider", "openrouter")
-        logger.debug(f"Using default provider from config: {default}")
-        return default
+            else:
+                logger.debug("Using provider from PRIMARY_PROVIDER: openai")
+        return "openai"
 
     @property
     def fallback_providers(self) -> List[str]:
-        """Get fallback provider chain
+        """Return no fallback providers.
 
-        Returns all enabled providers with valid API keys except the primary provider.
-        Can be overridden by FALLBACK_PROVIDERS env var (comma-separated).
-
-        Priority:
-        1. FALLBACK_PROVIDERS env var (explicit override)
-        2. All enabled providers with valid API keys except primary (auto-detected)
+        The application is intentionally restricted to OpenAI OAuth.
         """
-        # 1. Can be overridden by FALLBACK_PROVIDERS env var (comma-separated)
-        env_fallbacks = os.getenv("FALLBACK_PROVIDERS")
-        if env_fallbacks:
-            logger.debug(f"Using fallback providers from env: {env_fallbacks}")
-            return [p.strip() for p in env_fallbacks.split(",")]
-
-        # 2. Auto-load enabled providers (with valid API keys) except primary
-        primary = self.primary_provider
-        enabled_providers = self.get_enabled_providers()
-
-        # Filter out the primary provider and return others
-        fallbacks = [p for p in enabled_providers if p != primary]
-
-        logger.debug(
-            f"Auto-loaded fallback providers: {fallbacks} "
-            f"(enabled: {enabled_providers}, primary: {primary})"
-        )
-        return fallbacks
+        return []
 
     def get_provider_config(
         self, provider_name: Optional[str] = None
@@ -355,26 +293,14 @@ class ConfigManager:
 
     def get_enabled_providers(self) -> List[str]:
         """
-        Get list of enabled providers with valid credentials
+        Get list of enabled providers with valid credentials.
 
-        Returns:
-            List of provider names that are:
-            1. Enabled in config
-            2. Have valid API keys set
+        ValueCell currently exposes only the OpenAI OAuth provider.
         """
-        enabled = []
-
-        for provider_name in self.loader.list_providers():
-            provider_config = self.get_provider_config(provider_name)
-
-            if not provider_config or not provider_config.enabled:
-                continue
-
-            # Check if API key is available (ollama doesn't need one)
-            if provider_name == "ollama" or provider_config.api_key:
-                enabled.append(provider_name)
-
-        return enabled
+        provider_config = self.get_provider_config("openai")
+        if provider_config and provider_config.enabled and has_stored_credentials():
+            return ["openai"]
+        return []
 
     def validate_provider(self, provider_name: str) -> tuple[bool, Optional[str]]:
         """
@@ -386,6 +312,12 @@ class ConfigManager:
         Returns:
             Tuple of (is_valid, error_message)
         """
+        if provider_name != "openai":
+            return (
+                False,
+                f"Provider '{provider_name}' is disabled in this build. Use 'openai' with ChatGPT OAuth.",
+            )
+
         provider_config = self.get_provider_config(provider_name)
 
         if not provider_config:
@@ -393,6 +325,14 @@ class ConfigManager:
 
         if not provider_config.enabled:
             return False, f"Provider '{provider_name}' is disabled in config"
+
+        if provider_name == "openai":
+            if not has_stored_credentials():
+                return (
+                    False,
+                    "OpenAI OAuth is not configured. Sign in with ChatGPT first.",
+                )
+            return True, None
 
         # Check API key (except for ollama)
         if provider_name != "ollama" and not provider_config.api_key:

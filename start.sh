@@ -19,6 +19,16 @@ error() { echo "[ERR ]  $*" 1>&2; }
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
+unset_mismatched_venv() {
+  local project_dir="$1"
+  local project_venv="$project_dir/.venv"
+
+  if [[ -n "${VIRTUAL_ENV:-}" && "$VIRTUAL_ENV" != "$project_venv" ]]; then
+    info "Ignoring active virtualenv $VIRTUAL_ENV and using $project_venv"
+    unset VIRTUAL_ENV
+  fi
+}
+
 ensure_brew_on_macos() {
   if [[ "${OSTYPE:-}" == darwin* ]]; then
     if ! command_exists brew; then
@@ -80,7 +90,10 @@ compile() {
   # Backend deps
   if [[ -d "$PY_DIR" ]]; then
     info "Sync Python dependencies (uv sync)..."
-    (cd "$PY_DIR" && bash scripts/prepare_envs.sh && uv run valuecell/server/db/init_db.py)
+    (
+      unset_mismatched_venv "$PY_DIR"
+      cd "$PY_DIR" && bash scripts/prepare_envs.sh && uv run valuecell/server/db/init_db.py
+    )
     success "Python dependencies synced"
   else
     warn "Backend directory not found: $PY_DIR. Skipping"
@@ -102,6 +115,7 @@ start_backend() {
     return 0
   fi
   info "Starting backend in debug mode (AGENT_DEBUG_MODE=true)..."
+  unset_mismatched_venv "$PY_DIR"
   cd "$PY_DIR" && AGENT_DEBUG_MODE=true uv run python -m valuecell.server.main
 }
 

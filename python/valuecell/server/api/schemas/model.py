@@ -48,6 +48,18 @@ class ProviderDetailData(BaseModel):
     base_url: Optional[str] = Field(None, description="API base URL")
     is_default: bool = Field(..., description="Whether this is the primary provider")
     default_model_id: Optional[str] = Field(None, description="Default model id")
+    auth_type: Optional[str] = Field(
+        None, description="Authentication type, e.g. 'api_key' or 'oauth'"
+    )
+    oauth_authenticated: bool = Field(
+        default=False, description="Whether OpenAI OAuth credentials are available"
+    )
+    oauth_expires_at: Optional[int] = Field(
+        None, description="OAuth access token expiry time in epoch milliseconds"
+    )
+    oauth_account_id: Optional[str] = Field(
+        None, description="ChatGPT account id for the stored OAuth session"
+    )
     api_key_url: Optional[str] = Field(
         None, description="URL to obtain/apply for the provider's API key"
     )

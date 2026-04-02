@@ -1,5 +1,4 @@
 import asyncio
-import os
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -245,10 +244,7 @@ async def fetch_event_sec_filings(
 async def web_search(query: str) -> str:
     """Search web for the given query and return a summary of the top results.
 
-    This function uses the centralized configuration system to create model instances.
-    It supports multiple search providers:
-    - Google (Gemini with search enabled) - when WEB_SEARCH_PROVIDER=google and GOOGLE_API_KEY is set
-    - Perplexity (via OpenRouter) - default fallback
+    This function uses the OpenAI OAuth-backed model with built-in web search.
 
     Args:
         query: The search query string.
@@ -258,44 +254,18 @@ async def web_search(query: str) -> str:
     """
     from valuecell.utils.model import create_model_with_provider
 
-    # Check which provider to use based on environment configuration
-    if os.getenv("WEB_SEARCH_PROVIDER", "google").lower() == "google" and os.getenv(
-        "GOOGLE_API_KEY"
-    ):
-        return await _web_search_google(query)
-
-    # Use Perplexity Sonar via OpenRouter for web search
-    # Perplexity models are optimized for web search and real-time information
     model = create_model_with_provider(
-        provider="openrouter",
-        model_id="perplexity/sonar",
-        max_tokens=None,
+        provider="openai",
+        model_id="gpt-5.4",
+        max_tokens=4096,
     )
-    response = await Agent(model=model).arun(query)
-    return response.content
-
-
-async def _web_search_google(query: str) -> str:
-    """Search Google for the given query and return a summary of the top results.
-
-    Uses Google Gemini with search grounding enabled for real-time web information.
-
-    Args:
-        query: The search query string.
-
-    Returns:
-        A summary of the top search results.
-    """
-    from valuecell.utils.model import create_model_with_provider
-
-    # Use Google Gemini with search enabled
-    # The search=True parameter enables Google Search grounding for real-time information
-    model = create_model_with_provider(
-        provider="google",
-        model_id="gemini-2.5-flash",
-        search=True,  # Enable Google Search grounding
+    response = await Agent(
+        model=model,
+        tools=[{"type": "web_search_preview"}],
+    ).arun(
+        "Use web search to gather current information and summarize the most relevant findings.\n\n"
+        f"Query: {query}"
     )
-    response = await Agent(model=model).arun(query)
     return response.content
 
 

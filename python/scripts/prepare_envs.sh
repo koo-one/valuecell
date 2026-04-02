@@ -27,6 +27,12 @@ if [ ! -f "pyproject.toml" ]; then
     exit 1
 fi
 
+PROJECT_VENV="$(pwd)/.venv"
+if [ -n "${VIRTUAL_ENV:-}" ] && [ "$VIRTUAL_ENV" != "$PROJECT_VENV" ]; then
+    echo -e "${YELLOW}Ignoring active virtualenv $VIRTUAL_ENV and using $PROJECT_VENV${NC}"
+    unset VIRTUAL_ENV
+fi
+
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
     echo -e "${RED}Error: 'uv' command not found. Please install 'uv' (e.g., brew install uv).${NC}"

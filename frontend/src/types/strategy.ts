@@ -84,7 +84,7 @@ export interface CreateStrategy {
   llm_model_config: {
     provider: string; // e.g. 'openrouter'
     model_id: string; // e.g. 'deepseek-ai/deepseek-v3.1'
-    api_key: string;
+    api_key?: string;
   };
 
   // Exchange Configuration
@@ -116,7 +116,7 @@ export interface CopyStrategy {
   llm_model_config: {
     provider: string; // e.g. 'openrouter'
     model_id: string; // e.g. 'deepseek-ai/deepseek-v3.1'
-    api_key: string;
+    api_key?: string;
   };
 
   // Exchange Configuration

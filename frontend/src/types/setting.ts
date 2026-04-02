@@ -13,11 +13,15 @@ export type ProviderModelInfo = {
 };
 
 export type ProviderDetail = {
-  api_key: string;
-  api_key_url: string;
-  base_url: string;
+  api_key?: string | null;
+  api_key_url?: string | null;
+  base_url?: string | null;
   is_default: boolean;
-  default_model_id: string;
+  default_model_id?: string | null;
+  auth_type?: string | null;
+  oauth_authenticated: boolean;
+  oauth_expires_at?: number | null;
+  oauth_account_id?: string | null;
   models: ProviderModelInfo[];
 };
 

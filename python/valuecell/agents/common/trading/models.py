@@ -84,7 +84,10 @@ class LLMModelConfig(BaseModel):
         default=DEFAULT_AGENT_MODEL,
         description="Model identifier (e.g., 'deepseek-ai/deepseek-v3.1', 'gpt-4o')",
     )
-    api_key: str = Field(..., description="API key for the model provider")
+    api_key: Optional[str] = Field(
+        default=None,
+        description="Credential override for the model provider when required",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -114,7 +117,7 @@ class LLMModelConfig(BaseModel):
                     or DEFAULT_AGENT_MODEL,
                 )
                 # If api_key not provided by client, use provider config api_key
-                if values.get("api_key") is None and getattr(
+                if values.get("api_key") in (None, "") and getattr(
                     provider_cfg, "api_key", None
                 ):
                     values["api_key"] = provider_cfg.api_key

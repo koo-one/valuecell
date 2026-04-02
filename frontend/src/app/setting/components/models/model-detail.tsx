@@ -1,6 +1,6 @@
 import { DialogDescription } from "@radix-ui/react-dialog";
 import { useForm } from "@tanstack/react-form";
-import { Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
@@ -9,6 +9,8 @@ import {
   useCheckModelAvailability,
   useDeleteProviderModel,
   useGetModelProviderDetail,
+  useLoginModelProviderOAuth,
+  useLogoutModelProviderOAuth,
   useSetDefaultProvider,
   useSetDefaultProviderModel,
   useUpdateProviderConfig,
@@ -29,17 +31,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
-import LinkButton from "@/components/valuecell/button/link-button";
 
 const configSchema = z.object({
-  api_key: z.string(),
   base_url: z.string(),
 });
 
@@ -59,6 +53,10 @@ export function ModelDetail({ provider }: ModelDetailProps) {
     useGetModelProviderDetail(provider);
   const { mutate: updateConfig, isPending: updatingConfig } =
     useUpdateProviderConfig();
+  const { mutateAsync: loginOAuth, isPending: loggingIn } =
+    useLoginModelProviderOAuth();
+  const { mutateAsync: logoutOAuth, isPending: loggingOut } =
+    useLogoutModelProviderOAuth();
   const { mutate: addModel, isPending: addingModel } = useAddProviderModel();
   const { mutate: deleteModel, isPending: deletingModel } =
     useDeleteProviderModel();
@@ -74,11 +72,9 @@ export function ModelDetail({ provider }: ModelDetailProps) {
   } = useCheckModelAvailability();
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
 
   const configForm = useForm({
     defaultValues: {
-      api_key: "",
       base_url: "",
     },
     validators: {
@@ -88,7 +84,6 @@ export function ModelDetail({ provider }: ModelDetailProps) {
       if (!provider) return;
       updateConfig({
         provider,
-        api_key: value.api_key,
         base_url: value.base_url,
       });
     },
@@ -96,14 +91,12 @@ export function ModelDetail({ provider }: ModelDetailProps) {
 
   useEffect(() => {
     if (providerDetail) {
-      configForm.setFieldValue("api_key", providerDetail.api_key || "");
       configForm.setFieldValue("base_url", providerDetail.base_url || "");
     }
   }, [providerDetail, configForm.setFieldValue]);
 
   useEffect(() => {
     if (provider) {
-      setShowApiKey(false);
       resetCheckResult();
     }
   }, [provider, resetCheckResult]);
@@ -144,7 +137,9 @@ export function ModelDetail({ provider }: ModelDetailProps) {
     deletingModel ||
     settingDefaultModel ||
     settingDefaultProvider ||
-    checkingAvailability;
+    checkingAvailability ||
+    loggingIn ||
+    loggingOut;
 
   if (detailLoading) {
     return (
@@ -179,100 +174,84 @@ export function ModelDetail({ provider }: ModelDetailProps) {
       <form>
         <div className="flex flex-col gap-6">
           <FieldGroup>
-            <configForm.Field name="api_key">
-              {(field) => (
-                <Field className="text-foreground">
-                  <FieldLabel
-                    htmlFor="api_key"
-                    className="font-medium text-base"
-                  >
-                    {t("settings.models.apiKey")}
-                  </FieldLabel>
-                  <div className="flex items-center gap-4">
-                    <InputGroup>
-                      <InputGroupInput
-                        type={showApiKey ? "text" : "password"}
-                        id="api_key"
-                        placeholder={t("settings.models.enterApiKey")}
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        onBlur={() => configForm.handleSubmit()}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          }
-                        }}
-                      />
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupButton
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          aria-label={
-                            showApiKey
-                              ? t("settings.models.hidePassword")
-                              : t("settings.models.showPassword")
-                          }
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </InputGroupButton>
-                      </InputGroupAddon>
-                    </InputGroup>
-
+            <Field className="text-foreground">
+              <FieldLabel className="font-medium text-base">
+                ChatGPT OAuth
+              </FieldLabel>
+              <div className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3">
+                <div className="text-sm">
+                  {providerDetail.oauth_authenticated ? (
+                    <span className="text-green-600">
+                      Connected
+                      {providerDetail.oauth_expires_at
+                        ? `, expires ${new Date(providerDetail.oauth_expires_at).toLocaleString()}`
+                        : ""}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Not connected</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {!providerDetail.oauth_authenticated ? (
                     <Button
                       type="button"
-                      variant={"outline"}
                       disabled={isBusy}
                       onClick={async () => {
-                        await checkAvailability({
-                          provider,
-                          model_id: providerDetail.default_model_id,
-                        });
+                        await loginOAuth({ provider });
                       }}
                     >
-                      {checkingAvailability
-                        ? t("settings.models.waitingForCheck")
-                        : t("settings.models.checkAvailability")}
+                      {loggingIn ? "Connecting..." : "Connect ChatGPT"}
                     </Button>
-                  </div>
-                  {checkResult?.data && (
-                    <div className="text-sm">
-                      {checkResult.data.ok ? (
-                        <span className="text-green-600">
-                          {t("settings.models.available")}
-                          {checkResult.data.status
-                            ? ` (${checkResult.data.status})`
-                            : ""}
-                        </span>
-                      ) : (
-                        <span className="text-red-600">
-                          {t("settings.models.unavailable")}
-                          {checkResult.data.status
-                            ? ` (${checkResult.data.status})`
-                            : ""}
-                          {checkResult.data.error
-                            ? `: ${checkResult.data.error}`
-                            : ""}
-                        </span>
-                      )}
-                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isBusy}
+                      onClick={async () => {
+                        await logoutOAuth({ provider });
+                      }}
+                    >
+                      {loggingOut ? "Disconnecting..." : "Disconnect"}
+                    </Button>
                   )}
-                  <LinkButton
-                    className="w-fit! hover:text-foreground"
-                    url={providerDetail.api_key_url}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isBusy}
+                    onClick={async () => {
+                      await checkAvailability({
+                        provider,
+                        model_id: providerDetail.default_model_id || undefined,
+                      });
+                    }}
                   >
-                    {t("settings.models.getApiKey")}
-                  </LinkButton>
-                  <FieldError errors={field.state.meta.errors} />
-                </Field>
-              )}
-            </configForm.Field>
+                    {checkingAvailability ? "Checking..." : "Check Availability"}
+                  </Button>
+                </div>
+                {checkResult?.data && (
+                  <div className="text-sm">
+                    {checkResult.data.ok ? (
+                      <span className="text-green-600">
+                        Reachable
+                        {checkResult.data.status
+                          ? ` (${checkResult.data.status})`
+                          : ""}
+                      </span>
+                    ) : (
+                      <span className="text-red-600">
+                        Unavailable
+                        {checkResult.data.status
+                          ? ` (${checkResult.data.status})`
+                          : ""}
+                        {checkResult.data.error
+                          ? `: ${checkResult.data.error}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Field>
 
             {/* API Host section */}
             <configForm.Field name="base_url">
